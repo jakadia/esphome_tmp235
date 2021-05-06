@@ -1,0 +1,100 @@
+esphome:
+  name: temp_sensor
+  platform: ESP32
+  board: featheresp32
+
+wifi:
+  ssid: !secret ssid
+  password: !secret ssid_pass
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Temp Sensor Fallback Hotspot"
+    password: !secret pass
+
+captive_portal:
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  password: !secret pass
+
+ota:
+  password: !secret pass
+  
+web_server:
+  port: 80
+  
+sensor:
+  - platform: adc
+    pin: 32
+    update_interval: 5s
+    attenuation: 11db
+    id: sensorPin
+    filters:
+      - calibrate_linear:
+          - 0.0 -> 0.0
+          - 0.09 -> 0.2
+          - 0.21 -> 0.3
+          - 0.33 -> 0.4
+          - 0.44 -> 0.5
+          - 0.55 -> 0.6
+          - 0.67 -> 0.7
+          - 0.79 -> 0.8
+          - 0.91 -> 0.9
+          - 1.03 -> 1.0
+          
+  - platform: adc
+    pin: 33
+    update_interval: 5s
+    attenuation: 11db
+    id: voltPin
+
+  - platform: template
+    name: Test Temperature
+    unit_of_measurement: "°F"
+    accuracy_decimals: 1
+    lambda: |-
+      float tempC = (id(sensorPin).state - 0.5)*100;
+      float tempF = (tempC*1.8)+32;
+      return tempF;
+    update_interval: 5s
+        
+  - platform: wifi_signal
+    name: "WiFi Signal Sensor"
+    update_interval: 60s
+    
+  - platform: uptime
+    name: Uptime Sensor
+    id: uptime_sensor
+    update_interval: 60s
+    on_raw_value:
+      then:
+        - text_sensor.template.publish:
+            id: uptime_human
+            state: !lambda |-
+              int seconds = round(id(uptime_sensor).raw_state);
+              int days = seconds / (24 * 3600);
+              seconds = seconds % (24 * 3600);
+              int hours = seconds / 3600;
+              seconds = seconds % 3600;
+              int minutes = seconds /  60;
+              seconds = seconds % 60;
+              return (
+                (days ? String(days) + "d " : "") +
+                (hours ? String(hours) + "h " : "") +
+                (minutes ? String(minutes) + "m " : "") +
+                (String(seconds) + "s")
+              ).c_str();  
+    
+text_sensor:
+  - platform: template
+    name: Uptime Human Readable
+    id: uptime_human
+    icon: mdi:clock-start
+    
+switch:
+  - platform: restart
+    name: "Restart"
